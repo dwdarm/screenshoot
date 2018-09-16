@@ -96,6 +96,7 @@ init_about_dialog ()
 	sprintf (version, "%d.%d", SCREENSHOOT_VERSION_MAJOR, SCREENSHOOT_VERSION_MINOR);
 	GtkWidget *dialog = gtk_about_dialog_new ();
 	gtk_about_dialog_set_program_name ((GtkAboutDialog*)dialog, "Screenshoot");
+	gtk_about_dialog_set_logo_icon_name ((GtkAboutDialog*)dialog, "help-about");
 	gtk_about_dialog_set_version ((GtkAboutDialog*)dialog, version);
 	gtk_about_dialog_set_copyright ((GtkAboutDialog*)dialog, "(c) Fajar Dwi Darmanto");
 	return dialog;
