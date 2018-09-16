@@ -1,21 +1,21 @@
  screenshoot
  ===========
 
- An application to take screenshot.
-
+ An application to take screenshot.</br>
+ 
 
 
  Installation
  ============
 
- $ cmake .
- $ make 
- $ sudo make install
+ $ cmake .</br>
+ $ make </br>
+ $ sudo make install </br>
 
 
 
  Requirements
  ============
  
- GTK+ version >= 3.0 
+ GTK+ version >= 3.0 </br>
 
