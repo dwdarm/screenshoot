@@ -5,10 +5,12 @@
 
 
 #include "screenshoot.h"
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
+
+#define DEFAULT_AREA ENTIRE_SCREEN
+#define DEFAULT_FORMAT PNG
+#define DEFAULT_DELAY 250
 
 // area crop options
 enum {
@@ -26,187 +28,242 @@ enum {
 // main variables
 typedef struct {
 	GtkWidget *window;
-	int area;
-	int format;
-	int delay;
+	gint area;
+	gint format;
+	gint delay;
 } Comp;
 
-// preview dialog
-typedef struct {
-	GtkWidget *dialog;
-	GtkWidget *label;
-	GtkWidget *image;
-	
-	GtkWidget *pbox;
-	GtkWidget *entry;
-	GtkWidget *cbtn;
-	
-	GdkPixbuf *pixbuf;
-	char path[512];
-	char filename[512];
-} PreviewDialog;
 
-#define DEFAULT_AREA ENTIRE_SCREEN
-#define DEFAULT_FORMAT PNG
-#define DEFAULT_DELAY 250
+/* 
+ * Preview dialog
+ */
+
+typedef struct {
+	GtkWidget *entry;
+	GdkPixbuf *pixbuf;
+	gint format;
+	gchar *path;
+	gchar *filename;
+} preview_dialog_data;
 
 static void
-select_dest_cb (GtkWidget *widget, gpointer data)
-{
-	PreviewDialog *prevd = (PreviewDialog*) data;
-	GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File", NULL,
-								  GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, 
-								  "Cancel", GTK_RESPONSE_CANCEL,
-                                  "Open", GTK_RESPONSE_ACCEPT, NULL);
-    int ret = gtk_dialog_run (GTK_DIALOG (dialog));
-    if (ret == GTK_RESPONSE_ACCEPT) {
-		gchar *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-		if (filename) {
-			sprintf (prevd->path, "%s/%s", filename, prevd->filename);
-			gtk_entry_set_text (GTK_ENTRY (prevd->entry), prevd->path);
-		}	
-	}
-	
-	gtk_widget_destroy (dialog);
-}
+preview_dialog_init (GdkPixbuf *pixbuf, Comp *comp);
 
-// file saving prompt dialog
-static PreviewDialog *
-preview_dialog_init (GdkPixbuf *pixbuf)
+static void
+preview_dialog_select_button_cb (GtkWidget *widget, gpointer user_data); 
+
+static void
+preview_dialog_action_button_cb (GtkDialog *dialog, gint response_id, gpointer user_data);
+
+/* 
+ * About dialog
+ */
+
+static void
+about_dialog_init ();
+
+/*
+ * save image to path
+ */
+
+static gboolean
+save_image_to_path (GdkPixbuf *pixbuf, const gchar *path, gint format);
+
+
+
+/* 
+ * function definition
+ */ 
+
+static void
+preview_dialog_init (GdkPixbuf *pixbuf, Comp *comp)
 {
+	GtkWidget *label = NULL;
+	GtkWidget *dialog = NULL;
+	GtkWidget *box1 = NULL, *box2 = NULL;
+	GtkWidget *image = NULL;
+	GtkWidget *entry = NULL;
+	GtkWidget *sbtn = NULL;
+	GdkPixbuf *spixbuf = NULL;
+	preview_dialog_data *data = NULL;
 	time_t rawtime;
 	struct tm *timeinfo;
 	
 	time (&rawtime);
 	timeinfo = localtime (&rawtime);
 	
-	PreviewDialog *ret = malloc (sizeof (PreviewDialog));
-	sprintf (ret->filename, "screenshoot-%d-%d-%d-%d-%d-%d", 
-			 timeinfo->tm_mday, timeinfo->tm_mon+1, timeinfo->tm_year+1900,
-			 timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-			 
-	sprintf (ret->path, "%s/%s", (char*)getenv ("HOME"), ret->filename);
+	data = g_malloc (sizeof (preview_dialog_data));
 	
-	ret->dialog = gtk_dialog_new ();
-	gtk_window_set_resizable (GTK_WINDOW (ret->dialog), FALSE);
+	data->filename = g_strdup_printf ("screenshoot-%d-%d-%d-%d-%d-%d", 
+			         timeinfo->tm_mday, timeinfo->tm_mon+1, timeinfo->tm_year+1900,
+			         timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+			 
+	data->path = g_strdup_printf ("%s/%s", (gchar*)getenv ("HOME"), data->filename);
+	data->pixbuf = pixbuf;
+	data->format = comp->format;
+	
+	dialog = gtk_dialog_new ();
+	gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
 	
 	// Dialog content area
-	GtkWidget *box = gtk_dialog_get_content_area (GTK_DIALOG (ret->dialog));
-	gtk_container_set_border_width (GTK_CONTAINER (box), 25);
-	gtk_box_set_spacing (GTK_BOX (box), 10);
+	box1 = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+	gtk_container_set_border_width (GTK_CONTAINER (box1), 25);
+	gtk_box_set_spacing (GTK_BOX (box1), 10);
 	
 	// label
-	ret->label = gtk_label_new (NULL);
-	gtk_label_set_markup (GTK_LABEL (ret->label), "<b>Preview</b>");
-	gtk_container_add (GTK_CONTAINER (box), ret->label);
+	label = gtk_label_new (NULL);
+	gtk_label_set_markup (GTK_LABEL (label), "<b>Preview</b>");
+	gtk_container_add (GTK_CONTAINER (box1), label);
 	
 	// scaled image data
-	ret->pixbuf = gdk_pixbuf_scale_simple (pixbuf, 
-									gdk_pixbuf_get_width (pixbuf)/2,
-									gdk_pixbuf_get_height (pixbuf)/2,
-									GDK_INTERP_NEAREST);
+	spixbuf = gdk_pixbuf_scale_simple (pixbuf, 
+									   gdk_pixbuf_get_width (pixbuf)/2,
+									   gdk_pixbuf_get_height (pixbuf)/2,
+									   GDK_INTERP_NEAREST);
 	
 	// image
-	ret->image = gtk_image_new_from_pixbuf (ret->pixbuf);
-	gtk_container_add (GTK_CONTAINER (box), ret->image);
+	image = gtk_image_new_from_pixbuf (spixbuf);
+	gtk_container_add (GTK_CONTAINER (box1), image);
 	
 	// path entry box
-	ret->pbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-	gtk_box_pack_start (GTK_BOX (ret->pbox), gtk_label_new ("Save as:"), FALSE, FALSE, 0);
+	box2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+	gtk_box_pack_start (GTK_BOX (box2), gtk_label_new ("Save as:"), FALSE, FALSE, 0);
 	
 	// path entry
-	ret->entry = gtk_entry_new ();
-	gtk_entry_set_text (GTK_ENTRY (ret->entry), ret->path);
-	gtk_widget_set_sensitive (ret->entry, FALSE);
-	gtk_box_pack_start (GTK_BOX (ret->pbox), ret->entry, TRUE, TRUE, 0);
+	entry = gtk_entry_new ();
+	gtk_entry_set_text (GTK_ENTRY (entry), data->path);
+	gtk_widget_set_sensitive (entry, FALSE);
+	gtk_box_pack_start (GTK_BOX (box2), entry, TRUE, TRUE, 0);
+	data->entry = entry;
 	
-	ret->cbtn = gtk_button_new_with_label ("Destination");
-	gtk_box_pack_start (GTK_BOX (ret->pbox), ret->cbtn, TRUE, TRUE, 0);
+	sbtn = gtk_button_new_with_label ("Destination");
+	gtk_box_pack_start (GTK_BOX (box2), sbtn, TRUE, TRUE, 0);
 	
-	gtk_container_add (GTK_CONTAINER (box), ret->pbox);
+	gtk_container_add (GTK_CONTAINER (box1), box2);
 	
-	gtk_dialog_add_buttons (GTK_DIALOG (ret->dialog), 
+	gtk_dialog_add_buttons (GTK_DIALOG (dialog), 
 							"Cancel", 0, "Save", 1, NULL);
 	
-	g_signal_connect (ret->cbtn, "clicked", G_CALLBACK(select_dest_cb), ret);
-	gtk_widget_show_all (ret->dialog);
+	g_signal_connect (sbtn, "clicked", G_CALLBACK(preview_dialog_select_button_cb), data);
+	g_signal_connect (dialog, "response", G_CALLBACK(preview_dialog_action_button_cb), data);
 	
-	return ret;
+	gtk_widget_show_all (dialog);
+	gtk_dialog_run (GTK_DIALOG (dialog));
+	gtk_widget_destroy (dialog);
+	g_object_unref (spixbuf);
+	g_free (data->path);
+	g_free (data->filename);
+	g_free (data);
 }
 
 static void
-preview_dialog_destroy (PreviewDialog *p) 
+preview_dialog_select_button_cb (GtkWidget *widget, gpointer user_data)
 {
-	gtk_widget_destroy (p->dialog);
-	g_object_unref (p->pixbuf);
-	free (p);
-}
-
-//file saved info dialog
-static GtkWidget *
-saved_dialog_init (GtkWidget *parent) 
-{
-	GtkWidget *dialog = gtk_message_dialog_new (GTK_WINDOW (parent),
-												GTK_DIALOG_MODAL,
-												GTK_MESSAGE_INFO,
-												GTK_BUTTONS_OK,
-												"File has been saved!");
-	gtk_window_set_title (GTK_WINDOW (dialog), "Information");
-	return dialog;
-}
-
-// about dialog
-static GtkWidget *
-init_about_dialog () 
-{
-	char version[16];
+	preview_dialog_data *data = NULL;
+	GtkWidget *chooser_dialog = NULL;
+	gchar *folder = NULL;
+	gint ret;
 	
-	sprintf (version, "%d.%d", SCREENSHOOT_VERSION_MAJOR, SCREENSHOOT_VERSION_MINOR);
-	GtkWidget *dialog = gtk_about_dialog_new ();
+	data = (preview_dialog_data*) user_data;
+	
+	chooser_dialog = gtk_file_chooser_dialog_new ("Open File", NULL,
+								  GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, 
+								  "Cancel", GTK_RESPONSE_CANCEL,
+                                  "Open", GTK_RESPONSE_ACCEPT, NULL);
+                                  
+    ret = gtk_dialog_run (GTK_DIALOG (chooser_dialog));
+    if (ret == GTK_RESPONSE_ACCEPT) {
+		folder = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (chooser_dialog));
+		if (folder) {
+			if (data->path) {
+				g_free (data->path);
+				data->path = NULL;
+			}
+			data->path = g_strdup_printf ("%s/%s", folder, data->filename);
+			gtk_entry_set_text (GTK_ENTRY (data->entry), data->path);
+		}	
+	}
+	
+	gtk_widget_destroy (chooser_dialog);
+}
+
+static void
+preview_dialog_action_button_cb (GtkDialog *dialog, gint response_id, gpointer user_data)
+{
+	preview_dialog_data *data = NULL;
+	GtkWidget *saved_dialog = NULL;
+	gboolean saved;
+	
+	data = (preview_dialog_data*) user_data;
+	
+	if (response_id != 1) {
+		return;
+	}
+	
+	saved = save_image_to_path (data->pixbuf, data->path, data->format);
+	if (saved) {
+		saved_dialog = gtk_message_dialog_new (GTK_WINDOW (dialog),
+										       GTK_DIALOG_MODAL,
+										       GTK_MESSAGE_INFO,
+										       GTK_BUTTONS_OK,
+										       "File has been saved!");
+		gtk_window_set_title (GTK_WINDOW (saved_dialog), "Information");
+		gtk_dialog_run (GTK_DIALOG (saved_dialog));
+		gtk_widget_destroy (saved_dialog);
+	}
+}
+
+static void
+about_dialog_init () 
+{
+	GtkWidget *dialog = NULL;
+	gchar *version = NULL;
+	
+	version = g_strdup_printf ("%d.%d", SCREENSHOOT_VERSION_MAJOR, SCREENSHOOT_VERSION_MINOR);
+	
+	dialog = gtk_about_dialog_new ();
 	gtk_about_dialog_set_program_name ((GtkAboutDialog*)dialog, "Screenshoot");
 	gtk_about_dialog_set_logo_icon_name ((GtkAboutDialog*)dialog, "help-about");
 	gtk_about_dialog_set_version ((GtkAboutDialog*)dialog, version);
 	gtk_about_dialog_set_copyright ((GtkAboutDialog*)dialog, "(c) Fajar Dwi Darmanto");
-	return dialog;
+	
+	gtk_dialog_run (GTK_DIALOG (dialog));
+	
+	g_free (version);
+	gtk_widget_destroy (dialog);
 }
 
-static void
-save_image_to_path (Comp *comp, GdkPixbuf *pixbuf, const char *path)
+static gboolean
+save_image_to_path (GdkPixbuf *pixbuf, const gchar *path, gint format)
 {
-	char filename[512];
+	gchar *real_path = NULL;
 	gboolean status = FALSE;
 	
-	switch (comp->format) {
+	switch (format) {
 		case JPEG:
-			sprintf (filename, "%s.jpg", path);
-			status = gdk_pixbuf_save (pixbuf, filename, "jpeg", NULL, "quality", "100", NULL);
+			real_path = g_strdup_printf ("%s.jpg", path);
+			status = gdk_pixbuf_save (pixbuf, real_path, "jpeg", NULL, "quality", "100", NULL);
 			break;
 		case PNG:
-			sprintf (filename, "%s.png", path);
-			status = gdk_pixbuf_save (pixbuf, filename, "png", NULL, "quality", "100", NULL);
+			real_path = g_strdup_printf ("%s.png", path);
+			status = gdk_pixbuf_save (pixbuf, real_path, "png", NULL, "quality", "100", NULL);
 			break;
 		case BMP:
-			sprintf (filename, "%s.bmp", path);
-			status = gdk_pixbuf_save (pixbuf, filename, "bmp", NULL, "quality", "100", NULL);
+			real_path = g_strdup_printf ("%s.bmp", path);
+			status = gdk_pixbuf_save (pixbuf, real_path, "bmp", NULL, "quality", "100", NULL);
 			break;
 		default:
 			break;
 	}
 	
-	if (status) {
-		GtkWidget *saved_dialog = saved_dialog_init (NULL);
-		gtk_dialog_run (GTK_DIALOG (saved_dialog));
-		gtk_widget_destroy (saved_dialog);
-	}
-	
+	g_free (real_path);
+	return status;
 }
 
-// timeout callback function
-static int
-timeout_cb (gpointer data)
+static gboolean
+timeout_cb (gpointer user_data)
 {
-	Comp *comp = (Comp*)data;
-	PreviewDialog *prevd = NULL;
+	Comp *comp = (Comp*) user_data;
 	GdkPixbuf *pixbuf = NULL;
 	GtkWidget *window = comp->window;
 			 
@@ -217,16 +274,7 @@ timeout_cb (gpointer data)
 	}
 	
 	if (pixbuf) {
-		prevd = preview_dialog_init (pixbuf);
-		int result = gtk_dialog_run (GTK_DIALOG (prevd->dialog));
-		switch (result) {
-			case 1:
-				save_image_to_path (comp, pixbuf, gtk_entry_get_text (GTK_ENTRY (prevd->entry)));
-				break;
-			default:
-				break;
-		}
-		preview_dialog_destroy (prevd);
+		preview_dialog_init (pixbuf, comp);
 		g_object_unref (pixbuf);
 	}
 	
@@ -292,9 +340,7 @@ set_bmp_cb (GtkWidget *widget, gpointer data)
 static void 
 show_about_cb (GtkWidget *widget, gpointer data)
 {
-	GtkWidget *dialog = init_about_dialog ();
-	gtk_dialog_run (GTK_DIALOG (dialog));
-	gtk_widget_destroy (dialog);
+	about_dialog_init ();
 }
 
 // activate signal handler
@@ -380,6 +426,8 @@ activate (GtkApplication *app, gpointer data)
 int main (int argc, char **argv)
 {
 	Comp comp;
+	int status;
+	
 	comp.area = DEFAULT_AREA;
 	comp.format = DEFAULT_FORMAT;
 	comp.delay = DEFAULT_DELAY;
@@ -389,7 +437,9 @@ int main (int argc, char **argv)
 	GtkApplication *app = gtk_application_new ("org.gtk.screenshoot", G_APPLICATION_FLAGS_NONE);
 	g_signal_connect (app, "activate", G_CALLBACK(activate), &comp);
 	
-    int status = g_application_run (G_APPLICATION(app), 0, NULL);
+    status = g_application_run (G_APPLICATION(app), 0, NULL);
+    
 	g_object_unref (app);
+	
 	return status;
 }
