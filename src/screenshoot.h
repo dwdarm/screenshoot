@@ -7,9 +7,6 @@
 #ifndef SCREENSHOOT_H
 #define SCREENSHOOT_H
 
-#include <gtk/gtk.h>
-#include "config.h"
-#include "capture.h"
-
+int screenshoot_init (int argc, char **argv);
 
 #endif

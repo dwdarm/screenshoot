@@ -4,7 +4,7 @@
  * */
 
 
-#include "screenshoot.h"
+#include "capture.h"
 
 GdkPixbuf *
 take_screenshoot ()

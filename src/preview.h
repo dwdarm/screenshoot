@@ -2,17 +2,14 @@
  * 2018 - Fajar Dwi Darmanto (fajardwidarm@gmail.com)
  * 
  * */
-
-
-#ifndef CAPTURE_H
-#define CAPTURE_H
+ 
+#ifndef PREVIEW_H
+#define PREVIEW_H
 
 #ifndef __GTK_H__
 #include <gtk/gtk.h>
 #endif
 
-GdkPixbuf *take_screenshoot ();
-
-GdkPixbuf *take_active_window ();
+void preview_init (GtkWidget *parent, GdkPixbuf *pixbuf, int format);
 
 #endif
