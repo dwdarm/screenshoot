@@ -1,0 +1,7 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define SCREENSHOOT_VERSION_MAJOR 0
+#define SCREENSHOOT_VERSION_MINOR 1
+
+#endif

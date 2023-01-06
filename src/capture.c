@@ -21,8 +21,11 @@ take_screenshoot ()
 	if (!window) {
 		return pixbuf;
 	}
-	
-	gdk_window_get_geometry (window, &x, &y, &w, &h);
+
+    gdk_window_get_position (window, &x, &y);
+    w = gdk_window_get_width (window);
+    h = gdk_window_get_height (window);
+    
 	pixbuf = gdk_pixbuf_get_from_window (window, x, y, w, h);
 	
 	return pixbuf;
